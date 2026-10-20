@@ -56,4 +56,12 @@ the default `python3` is 3.14, so don't use it). Docker Desktop 29.9 works. Imag
 <!-- Update after every milestone: date, what was done, commit hash. -->
 - 2026-10-20: Machine checks passed. Docker OK (the Rosetta error resolved itself; Rosetta
   is installed and running). Verified Postgres 16.15 + pgvector 0.8.7 and Redis 7 reachable
-  via containers. CLAUDE.md created. Week 1 folder structure + schema proposed, awaiting OK.
+  via containers. CLAUDE.md created. Week 1 folder structure + schema approved; using **uv**.
+- 2026-10-20 — **W1 M1 done:** uv project, FastAPI `/health` (checks DB + Redis, 503 if
+  either is down), Dockerfile, Compose (db, redis, api). 2 tests, ruff clean.
+  Next: M2 schema + Alembic.
+
+## Commands
+- `docker compose up -d --build` — start everything; `curl localhost:8000/health`
+- `uv run pytest` — tests (need `docker compose up -d db redis` running)
+- `uv run ruff check . && uv run ruff format .`
