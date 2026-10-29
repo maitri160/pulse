@@ -60,8 +60,17 @@ the default `python3` is 3.14, so don't use it). Docker Desktop 29.9 works. Imag
 - 2026-10-20 — **W1 M1 done:** uv project, FastAPI `/health` (checks DB + Redis, 503 if
   either is down), Dockerfile, Compose (db, redis, api). 2 tests, ruff clean.
   Next: M2 schema + Alembic.
+- 2026-10-29 — **Schedule compressed** (5 days behind). New dates: rest of W1 by Nov 1,
+  W2 Nov 2–5, W3 Nov 6–9, eval/README/deploy Nov 10–12, buffer Nov 13–14. Locust is now
+  a stretch goal; Prometheus = a `/metrics` endpoint via library only. Explanations stay
+  at 3–5 lines unless the user asks for detail.
+- 2026-10-29 — **W1 M2 done:** models (`sources` incl. `category`, `articles`, `events`),
+  first Alembic migration (also enables `vector`), `pulse_test` DB created by conftest,
+  migrations run at test start, per-test rollback. 6 tests. Next: M3 fetch one feed.
 
 ## Commands
 - `docker compose up -d --build` — start everything; `curl localhost:8000/health`
-- `uv run pytest` — tests (need `docker compose up -d db redis` running)
+- `uv run alembic upgrade head` — apply migrations to dev DB
+- `uv run alembic revision --autogenerate -m "..."` — new migration after changing models
+- `uv run pytest` — tests (need `docker compose up -d db redis`; uses separate `pulse_test` DB)
 - `uv run ruff check . && uv run ruff format .`
