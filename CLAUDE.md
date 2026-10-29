@@ -67,6 +67,12 @@ the default `python3` is 3.14, so don't use it). Docker Desktop 29.9 works. Imag
 - 2026-10-29 — **W1 M2 done:** models (`sources` incl. `category`, `articles`, `events`),
   first Alembic migration (also enables `vector`), `pulse_test` DB created by conftest,
   migrations run at test start, per-test rollback. 6 tests. Next: M3 fetch one feed.
+- 2026-10-29 — **W1 M3+M4 done (merged):** `app/ingest/` — normalize (canonical URL,
+  content hash), fetcher (httpx + feedparser, conditional GET), extract (trafilatura),
+  ingest (skip known URLs, hash-match → `duplicate_of_id`, `ON CONFLICT DO NOTHING`).
+  Added `httpx` (feedparser has no timeout control). Tests use `tests/fakes.py`
+  (httpx.MockTransport), no network. 24 tests. Real BBC World run: 27/27 with body;
+  rerun skips all 27. Next: M5 Celery + Beat + backoff.
 
 ## Commands
 - `docker compose up -d --build` — start everything; `curl localhost:8000/health`
@@ -74,3 +80,4 @@ the default `python3` is 3.14, so don't use it). Docker Desktop 29.9 works. Imag
 - `uv run alembic revision --autogenerate -m "..."` — new migration after changing models
 - `uv run pytest` — tests (need `docker compose up -d db redis`; uses separate `pulse_test` DB)
 - `uv run ruff check . && uv run ruff format .`
+- `uv run python -m scripts.fetch_once <feed_url> [name]` — fetch one real feed into dev DB
