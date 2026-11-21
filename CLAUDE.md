@@ -1,6 +1,7 @@
 # Pulse — news event intelligence feed
 
-Portfolio project. **Hard deadline: deployed by 2026-11-14.** Keep scope lean.
+Portfolio project. **Deadline: ship the core pipeline ASAP; job applications are live.**
+Keep scope lean.
 
 ## What it does
 Pulls articles from ~30–100 RSS feeds → removes exact and near-duplicates (same wire story
@@ -26,71 +27,34 @@ Humour welcome.
 
 ## Working rules
 - Small milestones. After each: short plain-words explanation of what was built, *why*,
-  the alternative rejected, and the trade-off.
+  the alternative rejected, and the trade-off. Use `/milestone` to finish one.
 - New concept → 3–5 line explanation + one link to read later. No long tutorials.
 - User must be able to explain every line in an interview. Prefer simple code; comment anything clever.
 - Tests written alongside features, not at the end.
 - Git commit after each milestone with clear messages. **Never push** until the user gives
-  their GitHub username and says yes.
+  their GitHub username and says yes (a hook blocks `git push`).
 - Ask before installing anything or running sudo.
-- End of each week: quiz the user with 5 interview-style questions on that week's design
-  decisions, then grade their answers honestly.
+- End of each phase: `/quiz` — 5 interview-style questions on that phase's design decisions,
+  graded honestly.
 
 ## Machine
 Apple Silicon Mac (arm64). Homebrew, git 2.50, Python 3.12.15 (`/opt/homebrew/bin/python3.12`;
 the default `python3` is 3.14, so don't use it). Docker Desktop 29.9 works. Images
 `pgvector/pgvector:pg16` and `redis:7-alpine` run natively on arm64.
 
-## Plan
-- **Week 1 (Oct 20–24):** skeleton, Docker Compose, DB schema (sources, articles, events) +
-  Alembic, Celery Beat fetching feeds, exact dedupe (URL + content hash), MinHash near-dup,
-  retries/backoff for failing feeds, basic tests.
-- **Week 2 (Oct 25–31):** embeddings, pgvector, incremental clustering into events, events API.
-- **Week 3 (Nov 1–7):** LLM event summaries (regenerate only on meaningful new articles),
-  ranked feed (recency + #sources + velocity), HTMX UI, Redis caching.
-- **Week 4 (Nov 8–14):** clustering eval on small hand-labelled set (precision/recall for
-  README), Locust load test, Prometheus metrics, README with architecture diagram + "Design
-  decisions", deploy, resume bullet.
+## Plan (in order, no fixed dates)
+1. **Ingest + dedupe:** skeleton, Compose, schema + Alembic, Celery Beat fetching, exact
+   dedupe (URL + content hash), MinHash near-dup, backoff for failing feeds, tests.
+2. **Events:** embeddings, pgvector, incremental clustering into events, events API.
+3. **Feed:** LLM event summaries (regenerate only on meaningful new articles), ranked feed
+   (recency + #sources + velocity), HTMX UI, Redis caching.
+4. **Ship:** clustering eval on a small hand-labelled set (precision/recall for README),
+   `/metrics` endpoint, README with architecture diagram + "Design decisions", deploy,
+   resume bullet. Stretch: Locust load test.
 
 ## Progress
-<!-- Update after every milestone: date, what was done, commit hash. -->
-- 2026-10-20: Machine checks passed. Docker OK (the Rosetta error resolved itself; Rosetta
-  is installed and running). Verified Postgres 16.15 + pgvector 0.8.7 and Redis 7 reachable
-  via containers. CLAUDE.md created. Week 1 folder structure + schema approved; using **uv**.
-- 2026-10-20 — **W1 M1 done:** uv project, FastAPI `/health` (checks DB + Redis, 503 if
-  either is down), Dockerfile, Compose (db, redis, api). 2 tests, ruff clean.
-  Next: M2 schema + Alembic.
-- 2026-10-29 — **Schedule compressed** (5 days behind). New dates: rest of W1 by Nov 1,
-  W2 Nov 2–5, W3 Nov 6–9, eval/README/deploy Nov 10–12, buffer Nov 13–14. Locust is now
-  a stretch goal; Prometheus = a `/metrics` endpoint via library only. Explanations stay
-  at 3–5 lines unless the user asks for detail.
-- 2026-10-29 — **W1 M2 done:** models (`sources` incl. `category`, `articles`, `events`),
-  first Alembic migration (also enables `vector`), `pulse_test` DB created by conftest,
-  migrations run at test start, per-test rollback. 6 tests. Next: M3 fetch one feed.
-- 2026-10-29 — **W1 M3+M4 done (merged):** `app/ingest/` — normalize (canonical URL,
-  content hash), fetcher (httpx + feedparser, conditional GET), extract (trafilatura),
-  ingest (skip known URLs, hash-match → `duplicate_of_id`, `ON CONFLICT DO NOTHING`).
-  Added `httpx` (feedparser has no timeout control). Tests use `tests/fakes.py`
-  (httpx.MockTransport), no network. 24 tests. Real BBC World run: 27/27 with body;
-  rerun skips all 27. Next: M5 Celery + Beat + backoff.
-- 2026-11-21 — **Dedupe race fixed:** partial unique index
-  `uq_articles_original_content_hash` (one original per hash, `WHERE duplicate_of_id IS
-  NULL`), hand-written migration `fa13b34449bc`. Insert uses `ON CONFLICT DO NOTHING` with
-  no target; a hash clash re-looks-up the original and retries once as a duplicate.
-  `ingest_source` now commits per article and saves etag/last_modified only after the
-  loop (it commits itself; callers don't). Verified with a real two-connection race
-  (loser waits, then skips) and a mutation check. Design decisions table added to
-  `docs/architecture.md`. 26 tests. Next: M5 Celery + Beat + backoff.
-- 2026-11-21 — **W1 M5 done:** Celery app (`app/worker/`), Beat every 60 s runs
-  `dispatch_due_feeds` → `claim_due_sources` (one UPDATE…RETURNING, 15-min lease) →
-  `fetch_source(id)` per feed. `app/ingest/scheduling.py`: backoff 5 min × 2^failures,
-  cap 6 h, ±10% jitter; `run_source` records success/failure (broad except → backoff).
-  `acks_late`, 10-min `task_time_limit`. 23 verified feeds in `sources.toml` +
-  `scripts/seed_sources.py` (upsert, stdlib tomllib). Compose: `migrate` (one-off),
-  `worker`, `beat`. Live run: 817 articles from 23 feeds, 11 exact dupes, 79% with
-  body; broken demo feed backed off to 10 min; 2nd round skipped known URLs. 41 tests.
-  Known: the dispatcher shares the queue with fetches, so a tick can run late when all
-  workers are busy (fine at this scale). Next: M6 MinHash near-dup.
+Milestone log: [docs/progress.md](docs/progress.md). Design decisions:
+[docs/architecture.md](docs/architecture.md#design-decisions).
 
 ## Commands
 - `docker compose up -d --build` — start everything; `curl localhost:8000/health`
