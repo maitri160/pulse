@@ -81,6 +81,16 @@ the default `python3` is 3.14, so don't use it). Docker Desktop 29.9 works. Imag
   loop (it commits itself; callers don't). Verified with a real two-connection race
   (loser waits, then skips) and a mutation check. Design decisions table added to
   `docs/architecture.md`. 26 tests. Next: M5 Celery + Beat + backoff.
+- 2026-11-21 — **W1 M5 done:** Celery app (`app/worker/`), Beat every 60 s runs
+  `dispatch_due_feeds` → `claim_due_sources` (one UPDATE…RETURNING, 15-min lease) →
+  `fetch_source(id)` per feed. `app/ingest/scheduling.py`: backoff 5 min × 2^failures,
+  cap 6 h, ±10% jitter; `run_source` records success/failure (broad except → backoff).
+  `acks_late`, 10-min `task_time_limit`. 23 verified feeds in `sources.toml` +
+  `scripts/seed_sources.py` (upsert, stdlib tomllib). Compose: `migrate` (one-off),
+  `worker`, `beat`. Live run: 817 articles from 23 feeds, 11 exact dupes, 79% with
+  body; broken demo feed backed off to 10 min; 2nd round skipped known URLs. 41 tests.
+  Known: the dispatcher shares the queue with fetches, so a tick can run late when all
+  workers are busy (fine at this scale). Next: M6 MinHash near-dup.
 
 ## Commands
 - `docker compose up -d --build` — start everything; `curl localhost:8000/health`
@@ -89,3 +99,6 @@ the default `python3` is 3.14, so don't use it). Docker Desktop 29.9 works. Imag
 - `uv run pytest` — tests (need `docker compose up -d db redis`; uses separate `pulse_test` DB)
 - `uv run ruff check . && uv run ruff format .`
 - `uv run python -m scripts.fetch_once <feed_url> [name]` — fetch one real feed into dev DB
+- `uv run python -m scripts.seed_sources` — load/update feeds from `sources.toml`
+- `docker compose logs -f worker beat` — watch scheduled fetching;
+  `docker compose stop worker beat` to pause it

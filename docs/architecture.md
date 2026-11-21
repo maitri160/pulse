@@ -23,7 +23,7 @@ flowchart LR
 
     User([Browser])
 
-    Beat -- "every 5 min:<br/>dispatch_due_feeds" --> Redis
+    Beat -- "every 60 s:<br/>dispatch_due_feeds<br/>(each feed every 5 min)" --> Redis
     Redis -- "tasks" --> Worker
     Worker -- "HTTP GET<br/>(ETag / Last-Modified)" --> RSS
     Worker -- "articles, events,<br/>embeddings" --> PG
@@ -82,5 +82,7 @@ yellow = Week 3 (LLM summaries). Week 3 also adds ranking and caching on the rea
 | Commit per article; save the feed's `etag` only after the loop | One commit per feed | An uncommitted original blocks other workers' inserts of the same text until commit; short transactions keep that wait tiny and avoid lock-order deadlocks. Saving `etag` last means a crash refetches the feed instead of skipping unsaved articles |
 | Hash the article body, not the headline | Hash the headline | Outlets rewrite headlines on identical wire copy |
 | Feed backoff state in Postgres (`consecutive_failures`, `next_fetch_at`) | Celery's built-in retry only | Survives restarts, visible to every worker and to a simple SQL query |
+| Beat runs one dispatcher every 60 s; it claims due feeds with one `UPDATE ... RETURNING` that pushes `next_fetch_at` 15 min ahead (a lease) | One Beat entry per feed; or SELECT due feeds, then mark them | Feeds live in the DB, not in code. The lease stops the next tick queueing a feed that's still queued or running; if a worker dies, the lease expires and the feed is retried |
+| `task_acks_late` + hard `task_time_limit` (10 min) shorter than the lease | Ack on receipt (Celery default) | A worker crash mid-fetch hands the task to another worker, which is safe because ingest is idempotent; the time limit guarantees a fetch ends before its lease runs out |
 | Tests build the schema with the real Alembic migrations | `Base.metadata.create_all()` | A broken migration fails in tests, not on deploy day |
 | One shared feed, no user accounts | Per-user personalised feeds | Accounts cost about a week and would block caching one ranked feed for everyone |

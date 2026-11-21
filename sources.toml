@@ -1,0 +1,117 @@
+# Feeds Pulse pulls from. Load into the DB with: uv run python -m scripts.seed_sources
+# category is used later to filter the feed (world / business / tech).
+
+[[source]]
+name = "BBC World"
+feed_url = "https://feeds.bbci.co.uk/news/world/rss.xml"
+category = "world"
+
+[[source]]
+name = "BBC Business"
+feed_url = "https://feeds.bbci.co.uk/news/business/rss.xml"
+category = "business"
+
+[[source]]
+name = "BBC Technology"
+feed_url = "https://feeds.bbci.co.uk/news/technology/rss.xml"
+category = "tech"
+
+[[source]]
+name = "The Guardian World"
+feed_url = "https://www.theguardian.com/world/rss"
+category = "world"
+
+[[source]]
+name = "The Guardian Business"
+feed_url = "https://www.theguardian.com/business/rss"
+category = "business"
+
+[[source]]
+name = "The Guardian Technology"
+feed_url = "https://www.theguardian.com/technology/rss"
+category = "tech"
+
+[[source]]
+name = "Al Jazeera"
+feed_url = "https://www.aljazeera.com/xml/rss/all.xml"
+category = "world"
+
+[[source]]
+name = "NPR News"
+feed_url = "https://feeds.npr.org/1001/rss.xml"
+category = "world"
+
+[[source]]
+name = "NPR World"
+feed_url = "https://feeds.npr.org/1004/rss.xml"
+category = "world"
+
+[[source]]
+name = "New York Times World"
+feed_url = "https://rss.nytimes.com/services/xml/rss/nyt/World.xml"
+category = "world"
+
+[[source]]
+name = "New York Times Business"
+feed_url = "https://rss.nytimes.com/services/xml/rss/nyt/Business.xml"
+category = "business"
+
+[[source]]
+name = "New York Times Technology"
+feed_url = "https://rss.nytimes.com/services/xml/rss/nyt/Technology.xml"
+category = "tech"
+
+[[source]]
+name = "DW"
+feed_url = "https://rss.dw.com/rdf/rss-en-all"
+category = "world"
+
+[[source]]
+name = "France 24"
+feed_url = "https://www.france24.com/en/rss"
+category = "world"
+
+[[source]]
+name = "CBS News World"
+feed_url = "https://www.cbsnews.com/latest/rss/world"
+category = "world"
+
+[[source]]
+name = "ABC News International"
+feed_url = "https://abcnews.go.com/abcnews/internationalheadlines"
+category = "world"
+
+[[source]]
+name = "Euronews"
+feed_url = "https://www.euronews.com/rss"
+category = "world"
+
+[[source]]
+name = "CNBC World"
+feed_url = "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100727362"
+category = "business"
+
+[[source]]
+name = "CNBC Business"
+feed_url = "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10001147"
+category = "business"
+
+[[source]]
+name = "Ars Technica"
+feed_url = "https://feeds.arstechnica.com/arstechnica/index"
+category = "tech"
+
+[[source]]
+name = "The Verge"
+feed_url = "https://www.theverge.com/rss/index.xml"
+category = "tech"
+
+[[source]]
+name = "TechCrunch"
+feed_url = "https://techcrunch.com/feed/"
+category = "tech"
+
+[[source]]
+name = "Wired"
+feed_url = "https://www.wired.com/feed/rss"
+category = "tech"
