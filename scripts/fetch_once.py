@@ -21,8 +21,9 @@ def main(feed_url: str, name: str) -> None:
             session.add(source)
             session.flush()  # assigns source.id
 
+        # ingest_source commits as it goes (per article, then the source's state at the end),
+        # which also commits the new Source row above.
         stats = ingest_source(session, client, source)
-        session.commit()
         print(f"{source.name}: {stats}")
 
 

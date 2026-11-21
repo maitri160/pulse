@@ -73,6 +73,14 @@ the default `python3` is 3.14, so don't use it). Docker Desktop 29.9 works. Imag
   Added `httpx` (feedparser has no timeout control). Tests use `tests/fakes.py`
   (httpx.MockTransport), no network. 24 tests. Real BBC World run: 27/27 with body;
   rerun skips all 27. Next: M5 Celery + Beat + backoff.
+- 2026-11-21 — **Dedupe race fixed:** partial unique index
+  `uq_articles_original_content_hash` (one original per hash, `WHERE duplicate_of_id IS
+  NULL`), hand-written migration `fa13b34449bc`. Insert uses `ON CONFLICT DO NOTHING` with
+  no target; a hash clash re-looks-up the original and retries once as a duplicate.
+  `ingest_source` now commits per article and saves etag/last_modified only after the
+  loop (it commits itself; callers don't). Verified with a real two-connection race
+  (loser waits, then skips) and a mutation check. Design decisions table added to
+  `docs/architecture.md`. 26 tests. Next: M5 Celery + Beat + backoff.
 
 ## Commands
 - `docker compose up -d --build` — start everything; `curl localhost:8000/health`

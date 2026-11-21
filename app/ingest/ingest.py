@@ -23,8 +23,42 @@ class IngestStats:
     duplicates: int = 0  # new URL, but same content as an article we already have
 
 
+def _find_original(session: Session, digest: str) -> int | None:
+    """Id of the original article with this content hash, or None if there isn't one."""
+    return session.scalar(
+        select(Article.id)
+        .where(Article.content_hash == digest, Article.duplicate_of_id.is_(None))
+        .limit(1)
+    )
+
+
+def _insert_article(session: Session, values: dict, duplicate_of_id: int | None) -> int | None:
+    """INSERT one article. Returns its new id, or None if Postgres skipped it.
+
+    ON CONFLICT DO NOTHING with no conflict target: a clash with ANY unique rule skips
+    the row. There are two: one row per canonical_url, and one original per
+    content_hash. Naming a target would cover only one of them; a clash with the
+    other would raise IntegrityError instead.
+    """
+    return session.scalar(
+        insert(Article)
+        .values(**values, duplicate_of_id=duplicate_of_id)
+        .on_conflict_do_nothing()
+        .returning(Article.id)
+    )
+
+
+def _url_exists(session: Session, canonical: str) -> bool:
+    return session.scalar(select(Article.id).where(Article.canonical_url == canonical)) is not None
+
+
 def ingest_source(session: Session, client: httpx.Client, source: Source) -> IngestStats:
-    """Fetch `source`'s feed and insert new articles. The caller commits.
+    """Fetch `source`'s feed and insert new articles.
+
+    Commits after every article, so this worker never holds a lock on an uncommitted
+    row for long and blocks another worker saving the same text. The feed's
+    etag/last_modified are saved only at the end: after a crash halfway through, the
+    next run downloads the full feed again and skips the URLs already saved.
 
     Safe to run any number of times: a URL is only ever stored once.
     """
@@ -33,11 +67,11 @@ def ingest_source(session: Session, client: httpx.Client, source: Source) -> Ing
     source.last_fetched_at = now
 
     result = fetch_feed(client, source.feed_url, source.etag, source.last_modified)
-    source.last_success_at = now
     if result.not_modified:
         stats.not_modified = True
+        source.last_success_at = now
+        session.commit()
         return stats
-    source.etag, source.last_modified = result.etag, result.last_modified
 
     # Keyed by canonical URL, which also drops repeats within the same feed.
     # setdefault keeps the FIRST entry for a URL (a plain dict comprehension would keep the last).
@@ -60,37 +94,47 @@ def ingest_source(session: Session, client: httpx.Client, source: Source) -> Ing
         # Hash the body if we got one. Headlines often get rewritten for the same wire copy,
         # so the body is the better fingerprint. Fall back to what the feed gave us.
         digest = content_hash(content or entry.summary or entry.title)
-        original_id = session.scalar(
-            select(Article.id)
-            .where(Article.content_hash == digest, Article.duplicate_of_id.is_(None))
-            .limit(1)
-        )
+        values = {
+            "source_id": source.id,
+            "url": entry.url,
+            "canonical_url": canonical,
+            "title": entry.title,
+            "rss_summary": entry.summary,
+            "content": content,
+            "content_hash": digest,
+            "published_at": entry.published_at,
+        }
 
-        # ON CONFLICT DO NOTHING: if another worker stored this URL since our check above,
-        # Postgres silently skips the row instead of raising. RETURNING gives back the new
-        # id, or None when the row was skipped.
-        inserted_id = session.scalar(
-            insert(Article)
-            .values(
-                source_id=source.id,
-                url=entry.url,
-                canonical_url=canonical,
-                title=entry.title,
-                rss_summary=entry.summary,
-                content=content,
-                content_hash=digest,
-                duplicate_of_id=original_id,
-                published_at=entry.published_at,
-            )
-            .on_conflict_do_nothing(index_elements=["canonical_url"])
-            .returning(Article.id)
-        )
+        original_id = _find_original(session, digest)
+        inserted_id = _insert_article(session, values, original_id)
 
-        if inserted_id is None:
+        if inserted_id is not None:
+            if original_id is None:
+                stats.originals += 1
+            else:
+                stats.duplicates += 1
+        elif original_id is not None or _url_exists(session, canonical):
+            # Skipped, and the reason can only be this URL: either we were saving a
+            # duplicate (duplicates never clash on the hash rule), or the URL is now stored.
             stats.skipped += 1
-        elif original_id is None:
-            stats.originals += 1
         else:
-            stats.duplicates += 1
+            # Race: we tried to save an original, but another worker committed an original
+            # with the same text after our _find_original ran. Look it up again (that new
+            # query sees the other worker's commit) and retry once, as a duplicate of it.
+            original_id = _find_original(session, digest)
+            retry_id = None
+            if original_id is not None:
+                retry_id = _insert_article(session, values, original_id)
+            if retry_id is not None:
+                stats.duplicates += 1
+            else:
+                # The retry clashed on the URL (the other worker stored this exact URL too),
+                # or the original disappeared before our second lookup. Either way, skip.
+                stats.skipped += 1
 
+        session.commit()
+
+    source.etag, source.last_modified = result.etag, result.last_modified
+    source.last_success_at = now
+    session.commit()
     return stats

@@ -6,7 +6,7 @@ place where the schema is described in code.
 
 from datetime import datetime
 
-from sqlalchemy import ARRAY, BigInteger, DateTime, ForeignKey, String, func
+from sqlalchemy import ARRAY, BigInteger, DateTime, ForeignKey, Index, String, func, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -46,6 +46,18 @@ class Article(Base):
     """One article from a feed. Duplicates are stored too, linked to their original."""
 
     __tablename__ = "articles"
+    __table_args__ = (
+        # At most ONE original per text. Partial index: it only covers rows where
+        # duplicate_of_id IS NULL, so any number of duplicates can share that hash.
+        # Without it, two workers saving the same wire story at the same moment could
+        # both store it as an original.
+        Index(
+            "uq_articles_original_content_hash",
+            "content_hash",
+            unique=True,
+            postgresql_where=text("duplicate_of_id IS NULL"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     source_id: Mapped[int] = mapped_column(ForeignKey("sources.id"), index=True)
