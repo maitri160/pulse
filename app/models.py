@@ -71,7 +71,9 @@ class Article(Base):
     rss_summary: Mapped[str | None]  # short description from the feed itself
     content: Mapped[str | None]  # full text from trafilatura; None if extraction failed
 
-    content_hash: Mapped[str] = mapped_column(String(64), index=True)  # sha256 hex = 64 chars
+    # sha256 hex = 64 chars. No plain index: the only lookup ("the original with this hash")
+    # uses uq_articles_original_content_hash (in __table_args__), whose WHERE matches it.
+    content_hash: Mapped[str] = mapped_column(String(64))
     # 128 MinHash values. BigInteger because they go up to 2^32 - 1,
     # which overflows Postgres's 4-byte `integer` (max ~2.1 billion).
     minhash: Mapped[list[int] | None] = mapped_column(ARRAY(BigInteger))

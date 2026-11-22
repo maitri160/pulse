@@ -50,4 +50,19 @@ One entry per milestone: date, what was done, commit hash. Newest at the bottom.
   misses git aliases and `env git push` (the CLAUDE.md rule covers those), and blocks shell
   commands whose quoted text mentions pushing (write such text with the editor instead);
   the reviewer agent loads from the next session. Next: M6 MinHash near-dup.
+  (commit: 96ad95c)
+- 2026-11-22 — **W1 M6 done: MinHash near-dup.** `app/ingest/neardup.py`: 5-word shingles,
+  128-number MinHash (datasketch 2.0, `scheme="affine32"`, fixed seed), only for bodies of
+  50+ words. In-memory LSH of the last 3 days of originals, loaded on first need per fetch;
+  LSH tuned to 0.5 to find candidates, each verified at 0.8 (tuned to 0.8, LSH finds a
+  0.8 pair only about half the time). Exact hash is checked first, near match only if that
+  misses; near-dups use the same `duplicate_of_id`, always pointing at an original. New
+  stat `near_duplicates`. Dropped redundant index `ix_articles_content_hash` (EXPLAIN:
+  the lookup uses the partial unique index), migration `96726efea6cc`, round trip OK.
+  `scripts/backfill_minhash.py` filled 825 old articles. Survey of 812 real originals:
+  true copies at 0.82–0.99 (AP story on ABC + CBS 0.88, DW republish 0.99), same event
+  written separately 0.64 (left for clustering). 52 tests. Reviewer: no criticals. Known: two workers saving
+  near-identical originals at the same moment can both stay originals (no DB rule can
+  say "similar"; clustering groups them); BBC video pages extract as shared navigation
+  text and match each other (no boilerplate filter yet). Next: phase 1 quiz, then phase 2.
   (commit: pending)

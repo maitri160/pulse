@@ -45,7 +45,7 @@ flowchart TD
     D -- yes --> SKIP[Skip]
     D -- no --> E{Same content<br/>hash?}
     E -- yes --> DUP[Save as duplicate<br/>duplicate_of_id = original]
-    E -- no --> F{MinHash LSH<br/>similarity >= 0.85?}
+    E -- no --> F{MinHash LSH<br/>similarity >= 0.8?}
     F -- yes --> DUP
     F -- no --> ORIG[Save as original]
 
@@ -85,4 +85,7 @@ yellow = Week 3 (LLM summaries). Week 3 also adds ranking and caching on the rea
 | Beat runs one dispatcher every 60 s; it claims due feeds with one `UPDATE ... RETURNING` that pushes `next_fetch_at` 15 min ahead (a lease) | One Beat entry per feed; or SELECT due feeds, then mark them | Feeds live in the DB, not in code. The lease stops the next tick queueing a feed that's still queued or running; if a worker dies, the lease expires and the feed is retried |
 | `task_acks_late` + hard `task_time_limit` (10 min) shorter than the lease | Ack on receipt (Celery default) | A worker crash mid-fetch hands the task to another worker, which is safe because ingest is idempotent; the time limit guarantees a fetch ends before its lease runs out |
 | Tests build the schema with the real Alembic migrations | `Base.metadata.create_all()` | A broken migration fails in tests, not on deploy day |
+| Near-dups: exact hash first, then MinHash + LSH over the last 3 days of originals, rebuilt in memory per fetch | Compare each new article with every stored one; or keep the LSH index in Redis | LSH checks only likely matches; a few thousand signatures load in well under a second, and Postgres stays the one copy of the truth |
+| LSH tuned to 0.5 for candidates, every candidate verified at 0.8 | Tune LSH to 0.8 directly | At its tuning point LSH finds a match only about half the time; a looser LSH plus an exact check misses almost nothing |
+| Near-dups reuse `duplicate_of_id` and always point at an original | A separate near-dup table or column | One rule for "this is a copy"; only originals are indexed, so no chains of copies of copies |
 | One shared feed, no user accounts | Per-user personalised feeds | Accounts cost about a week and would block caching one ranked feed for everyone |
