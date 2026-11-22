@@ -6,8 +6,12 @@ place where the schema is described in code.
 
 from datetime import datetime
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import ARRAY, BigInteger, DateTime, ForeignKey, Index, String, func, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+# all-MiniLM-L6-v2 turns any text into exactly 384 numbers.
+EMBEDDING_DIM = 384
 
 
 class Base(DeclarativeBase):
@@ -79,6 +83,11 @@ class Article(Base):
     minhash: Mapped[list[int] | None] = mapped_column(ARRAY(BigInteger))
     # NULL = this is an original. Otherwise points at the article this one copies.
     duplicate_of_id: Mapped[int | None] = mapped_column(ForeignKey("articles.id"), index=True)
+
+    # Meaning vector (pgvector). Only originals get one; duplicates follow their original.
+    # NULL = not embedded yet. Comes back from the DB as a numpy array, so test it with
+    # `is None`, never with `if article.embedding:`.
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIM))
 
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Indexed because dedupe loads "originals fetched in the last 3 days".

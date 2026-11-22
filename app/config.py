@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     # Beat tick doesn't queue it again. Must be longer than a fetch can take (see task_time_limit).
     fetch_lease_seconds: int = 15 * 60
     task_time_limit_seconds: int = 10 * 60
+    embed_interval_seconds: int = 60  # how often Beat asks for new articles to be embedded
 
 
 settings = Settings()

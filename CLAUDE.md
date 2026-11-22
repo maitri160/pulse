@@ -64,5 +64,5 @@ Milestone log: [docs/progress.md](docs/progress.md). Design decisions:
 - `uv run ruff check . && uv run ruff format .`
 - `uv run python -m scripts.fetch_once <feed_url> [name]` — fetch one real feed into dev DB
 - `uv run python -m scripts.seed_sources` — load/update feeds from `sources.toml`
-- `docker compose logs -f worker beat` — watch scheduled fetching;
+- `docker compose logs -f worker beat embedder` — watch fetching and embedding;
   `docker compose stop worker beat` to pause it

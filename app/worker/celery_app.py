@@ -23,10 +23,21 @@ celery_app.conf.update(
     # feed is never fetched by two workers at once.
     task_time_limit=settings.task_time_limit_seconds,
     broker_connection_retry_on_startup=True,
+    # Embedding gets its own queue, read by the `embedder` container with ONE process.
+    # The model (PyTorch + MiniLM, ~400 MB) then loads once, instead of once in each of the
+    # fetch worker's 4 processes. Everything else stays on the default queue ("celery").
+    task_routes={"app.worker.tasks.embed_articles": {"queue": "embed"}},
     beat_schedule={
         "dispatch-due-feeds": {
             "task": "app.worker.tasks.dispatch_due_feeds",
             "schedule": float(settings.dispatch_interval_seconds),
+        },
+        "embed-articles": {
+            "task": "app.worker.tasks.embed_articles",
+            "schedule": float(settings.embed_interval_seconds),
+            # If the embedder is down, Beat keeps queueing a tick every minute. Drop ticks
+            # older than one interval instead of running a pile of them back to back later.
+            "options": {"expires": float(settings.embed_interval_seconds)},
         },
     },
 )

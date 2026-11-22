@@ -50,10 +50,25 @@ services:
         condition: service_completed_successfully
 
   # Same image, different command: takes tasks off the Redis queue and runs them.
+  # -Q celery = only the default queue (feed fetching), never the embed queue.
   worker:
     build: .
-    command: ["celery", "-A", "app.worker.celery_app", "worker", "--loglevel=info", "--concurrency=4"]
+    command:
+      ["celery", "-A", "app.worker.celery_app", "worker", "--loglevel=info",
+       "--concurrency=4", "-Q", "celery"]
     environment: *app-env
+    depends_on: *app-deps
+
+  # Runs only embedding tasks, one at a time, so the ~400 MB model is loaded exactly once.
+  embedder:
+    build: .
+    command:
+      ["celery", "-A", "app.worker.celery_app", "worker", "--loglevel=info",
+       "--concurrency=1", "-Q", "embed", "-n", "embedder@%h"]
+    environment: *app-env
+    volumes:
+      # The model (~90 MB) downloads on first use; keep it so restarts don't download again.
+      - hf-cache:/root/.cache/huggingface
     depends_on: *app-deps
 
   # The clock. Exactly ONE beat must run, or every scheduled task is queued twice.
@@ -67,3 +82,4 @@ services:
 
 volumes:
   pgdata:
+  hf-cache:

@@ -65,4 +65,27 @@ One entry per milestone: date, what was done, commit hash. Newest at the bottom.
   near-identical originals at the same moment can both stay originals (no DB rule can
   say "similar"; clustering groups them); BBC video pages extract as shared navigation
   text and match each other (no boilerplate filter yet). Next: phase 1 quiz, then phase 2.
+  (commit: 87846c9)
+- 2026-11-22 — **Phase 1 quiz:** 1 Strong, 3 Partial, 1 Missing. Pattern: knows outcomes,
+  not mechanisms (ON CONFLICT is a quiet skip, not an error; an OOM kill runs no code, so
+  the lease recovers the feed). Found and fixed an over-claiming `acks_late` comment
+  (commit 62bb29b).
+- 2026-11-22 — **P2 M7 done: embeddings.** `articles.embedding vector(384)` (migration
+  `79d439d82c20`, hand-fixed: autogenerate forgot the pgvector import). No vector index
+  yet: nothing searches articles by vector (M8 indexes event centres). `app/events/embed.py`:
+  all-MiniLM-L6-v2, title + first 200 words, unit-length vectors; originals only
+  (duplicates follow their original). `embed_pending` takes batches of 64 with
+  `FOR NO KEY UPDATE SKIP LOCKED`, commits per batch. Celery task `embed_articles` on
+  its own `embed` queue, served by a new `embedder` container with 1 process (model loads
+  once: embedder 879 MB, fetch worker 435 MB); Beat every 60 s. PyTorch from the CPU-only
+  index in Docker. Live: 1,091 originals embedded in one 97 s run (incl. model download),
+  18 duplicates skipped. Lock check: NO KEY UPDATE lets ingest insert a duplicate pointing
+  at a locked row; plain FOR UPDATE blocked it. Real pairs: same event rewritten 0.97
+  (MinHash 0.64), unrelated 0.06, but different events on one topic 0.62, so M8's
+  threshold must sit well above that. Reviewer (no criticals) fixes: a failing batch is
+  retried one article at a time (else the oldest bad batch blocked everything forever);
+  stale Beat ticks expire; whitespace body falls back to summary; a two-connection lock
+  test (fails if `key_share` is removed). 62 tests. Known/deferred: no partial index for
+  "pending" rows (fine below ~100k articles); torch uses all CPU cores; the model
+  downloads on first run, not at build. Next: M8 clustering into events.
   (commit: pending)
