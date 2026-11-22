@@ -10,8 +10,12 @@ celery_app.conf.update(
     timezone="UTC",
     # We never read task return values, so don't store them anywhere.
     task_ignore_result=True,
-    # Acknowledge a task only AFTER it finishes. If a worker crashes mid-fetch, Redis hands
-    # the task to another worker. Safe because fetching a feed is idempotent.
+    # Acknowledge a task only AFTER it finishes, so tasks a worker has taken but not finished
+    # go back to Redis if the WHOLE worker dies (after Redis's visibility timeout, 1 h by
+    # default). If only one child process dies (OOM kill, hard time limit), Celery still acks
+    # the task (task_reject_on_worker_lost is off), so it is NOT retried. Either way, the feed
+    # is recovered by its 15-min lease expiring (see claim_due_sources). Rerunning a fetch is
+    # safe because ingest is idempotent.
     task_acks_late=True,
     # Each worker process takes one task at a time, so a slow feed doesn't hold others back.
     worker_prefetch_multiplier=1,
