@@ -21,8 +21,10 @@ MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 # The model reads at most 256 word pieces (~200 words) and silently ignores the rest, so we
 # cut the text ourselves: the title plus the opening paragraphs, where news puts the facts.
 MAX_WORDS = 200
-BATCH_SIZE = 64  # articles per transaction; the model encodes them in one go
-MAX_BATCHES_PER_RUN = 20  # up to 1,280 articles per task run, so a backlog clears quickly
+# One article per transaction. Measured on CPU: encoding 64 texts at once took 0.52 s and
+# 64 one at a time 0.58 s, so batching buys ~10% speed but meant one bad article could sink
+# 63 good ones and needed a whole fallback path. Not worth it (revisit with a GPU).
+MAX_PER_RUN = 1280  # cap per task run (~15 s), so one run can't go on forever
 
 # If a run is slow and the next one starts, the second skips the rows the first has locked
 # instead of embedding them again (SKIP LOCKED). key_share=True asks for FOR NO KEY UPDATE,
@@ -66,73 +68,39 @@ def embedding_text(title: str, content: str | None, summary: str | None) -> str:
     return f"{title}. {body}" if body else title
 
 
-def _embed_and_commit(session: Session, embedder: Embedder, articles: list[Article]) -> None:
-    vectors = embedder.encode([embedding_text(a.title, a.content, a.rss_summary) for a in articles])
-    for article, vector in zip(articles, vectors, strict=True):
-        article.embedding = vector
-    session.commit()  # also releases these rows' locks
-
-
-def _embed_one_by_one(session: Session, embedder: Embedder, ids: list[int]) -> tuple[int, set[int]]:
-    """Fallback after a batch failed: try each article alone. Returns (done, failed ids)."""
-    done, failed = 0, set()
-    for article_id in ids:
-        article = session.get(Article, article_id, with_for_update=ROW_LOCK)
-        if article is None or article.embedding is not None:
-            continue  # another run has it locked, or already embedded it
-        try:
-            _embed_and_commit(session, embedder, [article])
-            done += 1
-        except Exception:
-            session.rollback()
-            failed.add(article_id)
-            logger.exception("Embedding article %d failed; will retry next run", article_id)
-    return done, failed
-
-
-def embed_pending(
-    session: Session,
-    embedder: Embedder,
-    batch_size: int = BATCH_SIZE,
-    max_batches: int = MAX_BATCHES_PER_RUN,
-) -> int:
-    """Embed originals that have no embedding yet, in batches. Returns how many were done.
+def embed_pending(session: Session, embedder: Embedder, max_articles: int = MAX_PER_RUN) -> int:
+    """Embed originals that have no embedding yet, one per transaction. Returns how many.
 
     Duplicates are skipped: they're copies, so they join whatever event their original
     joins. Safe to run any number of times: done rows are no longer NULL.
     """
     done = 0
-    failed: set[int] = set()  # failed even alone in THIS run; skipped until the next run
-    for _ in range(max_batches):
-        batch = session.scalars(
+    failed: set[int] = set()  # failed in THIS run; skipped until the next run tries again
+    for _ in range(max_articles):
+        article = session.scalars(
             select(Article)
             .where(
                 Article.embedding.is_(None),
                 Article.duplicate_of_id.is_(None),
+                # Without this, a bad article (oldest first) would be picked again straight
+                # away, and fail again, until the cap: nothing newer would get embedded.
                 Article.id.not_in(list(failed)),
             )
             .order_by(Article.id)  # oldest first
-            .limit(batch_size)
+            .limit(1)
             .with_for_update(**ROW_LOCK)
-        ).all()
-        if not batch:
-            break
-        ids = [a.id for a in batch]
+        ).first()
+        if article is None:
+            break  # nothing left (or everything left is locked by another run)
+        article_id = article.id  # read now: after a rollback the object's fields expire
 
         try:
-            _embed_and_commit(session, embedder, batch)
-            done += len(batch)
+            text = embedding_text(article.title, article.content, article.rss_summary)
+            article.embedding = embedder.encode([text])[0]
+            session.commit()  # saves the vector and releases this row's lock
+            done += 1
         except Exception:
-            # Without this, one bad article would sink its whole batch, and because the
-            # query always takes the OLDEST pending rows, the same batch would be picked and
-            # fail again on every run: nothing newer would ever be embedded. So retry the
-            # batch one article at a time; the good ones go through, the bad one is logged.
-            session.rollback()
-            logger.warning("Embedding a batch of %d failed; retrying one by one", len(ids))
-            one_done, one_failed = _embed_one_by_one(session, embedder, ids)
-            done += one_done
-            failed |= one_failed
-
-        if len(batch) < batch_size:  # that was the last, partial batch
-            break
+            session.rollback()  # loses only this one article; earlier commits are safe
+            failed.add(article_id)
+            logger.exception("Embedding article %d failed; will retry next run", article_id)
     return done

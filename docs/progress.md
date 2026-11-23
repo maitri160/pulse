@@ -88,4 +88,11 @@ One entry per milestone: date, what was done, commit hash. Newest at the bottom.
   test (fails if `key_share` is removed). 62 tests. Known/deferred: no partial index for
   "pending" rows (fine below ~100k articles); torch uses all CPU cores; the model
   downloads on first run, not at build. Next: M8 clustering into events.
-  (commit: pending)
+  (commit d088b75)
+- 2026-11-23 — **M7 follow-up: embed one article per transaction.** Measured batching on
+  CPU: 64 texts at once 0.52 s vs one at a time 0.58 s, only ~10%. Batching had made one
+  bad article roll back 63 good ones and needed a fallback path (`_embed_one_by_one`).
+  Now `embed_pending` locks, encodes and commits one article at a time (up to 1,280 per
+  run); a failure rolls back only that article, which is skipped for the rest of the run
+  and retried next run. ~30 fewer lines. Test checks the bad article is tried once per run
+  (fails if the `failed` filter is removed). 62 tests.

@@ -10,7 +10,7 @@ from app.models import EMBEDDING_DIM, Article, Source
 class FakeEmbedder:
     """Deterministic stand-in for MiniLM: same text -> same unit-length vector, instantly.
 
-    Records each batch it was given, so tests can check the batching.
+    Records each call's texts, so tests can check what was embedded.
     """
 
     def __init__(self) -> None:
@@ -87,23 +87,27 @@ def test_embeds_originals_only_and_skips_done_ones(db_session):
     assert np.allclose(already.embedding, unit_vector("old"))  # left untouched
 
 
-def test_runs_in_batches_until_nothing_is_left(db_session):
+def test_embeds_one_at_a_time_oldest_first_until_nothing_is_left(db_session):
     source = make_source(db_session)
-    for n in range(5):
+    for n in range(3):
         make_article(db_session, source, n)
     fake = FakeEmbedder()
 
-    assert embed_pending(db_session, fake, batch_size=2) == 5
-    assert [len(b) for b in fake.batches] == [2, 2, 1]
-    assert embed_pending(db_session, fake, batch_size=2) == 0  # second run: nothing to do
+    assert embed_pending(db_session, fake) == 3
+    assert fake.batches == [
+        ["Story 0. Body of story 0."],
+        ["Story 1. Body of story 1."],
+        ["Story 2. Body of story 2."],
+    ]
+    assert embed_pending(db_session, fake) == 0  # second run: nothing to do
 
 
-def test_max_batches_caps_one_run(db_session):
+def test_max_articles_caps_one_run(db_session):
     source = make_source(db_session)
     for n in range(5):
         make_article(db_session, source, n)
 
-    assert embed_pending(db_session, FakeEmbedder(), batch_size=2, max_batches=1) == 2
+    assert embed_pending(db_session, FakeEmbedder(), max_articles=2) == 2
 
 
 def test_stored_vectors_work_with_pgvector_distance(db_session):
@@ -124,10 +128,15 @@ def test_stored_vectors_work_with_pgvector_distance(db_session):
 
 
 class FlakyEmbedder(FakeEmbedder):
-    """Fails on any batch containing a text with `bad` in it, like a model crash would."""
+    """Fails on any text with `bad` in it, like a model crash would."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.failures = 0
 
     def encode(self, texts: list[str]) -> list[list[float]]:
         if any("bad" in t for t in texts):
+            self.failures += 1
             raise RuntimeError("model blew up")
         return super().encode(texts)
 
@@ -136,11 +145,13 @@ def test_one_bad_article_does_not_block_the_rest(db_session):
     source = make_source(db_session)
     good_ids = [make_article(db_session, source, n).id for n in (1, 2, 4, 5)]
     bad = make_article(db_session, source, 3, content="a bad body")
-    db_session.commit()  # a failed batch rolls back; the test's own rows must survive that
+    db_session.commit()  # a failure rolls back; the test's own rows must survive that
+    flaky = FlakyEmbedder()
 
-    done = embed_pending(db_session, FlakyEmbedder(), batch_size=10)
+    done = embed_pending(db_session, flaky)
 
-    assert done == 4  # the batch of 5 failed, then the 4 good ones went through alone
+    assert done == 4  # 3 failed alone; the ones before AND after it were embedded
+    assert flaky.failures == 1  # tried once, not picked again and again in this run
     for article_id in good_ids:
         assert db_session.get(Article, article_id).embedding is not None
     db_session.refresh(bad)
