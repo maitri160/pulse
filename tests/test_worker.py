@@ -17,3 +17,10 @@ def test_embedding_runs_on_its_own_queue_and_fetching_stays_on_default():
 def test_beat_schedules_both_periodic_tasks():
     scheduled = {entry["task"] for entry in celery_app.conf.beat_schedule.values()}
     assert scheduled == {tasks.dispatch_due_feeds.name, tasks.embed_articles.name}
+
+
+def test_stale_embed_ticks_expire_with_clock_margin():
+    # Expiry is checked on the worker's clock against Beat's send time; 300 s leaves room
+    # for clock drift between machines (at 60 s, a 1-minute drift would drop every tick).
+    entry = celery_app.conf.beat_schedule["embed-articles"]
+    assert entry["options"]["expires"] == 300.0

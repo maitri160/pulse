@@ -4,6 +4,8 @@ from celery import Celery
 
 from app.config import settings
 
+EMBED_TICK_EXPIRES_SECONDS = 300.0  # see the "embed-articles" Beat entry below
+
 celery_app = Celery("pulse", broker=settings.redis_url, include=["app.worker.tasks"])
 
 celery_app.conf.update(
@@ -35,9 +37,11 @@ celery_app.conf.update(
         "embed-articles": {
             "task": "app.worker.tasks.embed_articles",
             "schedule": float(settings.embed_interval_seconds),
-            # If the embedder is down, Beat keeps queueing a tick every minute. Drop ticks
-            # older than one interval instead of running a pile of them back to back later.
-            "options": {"expires": float(settings.embed_interval_seconds)},
+            # If the embedder is down, Beat keeps queueing a tick every minute. Drop stale
+            # ticks instead of running a pile of them back to back later (no work is lost:
+            # the pending rows are in Postgres). 300 s, not 60: expiry compares Beat's clock
+            # with the worker's, so this leaves margin if they ever run on different machines.
+            "options": {"expires": EMBED_TICK_EXPIRES_SECONDS},
         },
     },
 )

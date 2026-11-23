@@ -96,3 +96,5 @@ One entry per milestone: date, what was done, commit hash. Newest at the bottom.
   run); a failure rolls back only that article, which is skipped for the rest of the run
   and retried next run. ~30 fewer lines. Test checks the bad article is tried once per run
   (fails if the `failed` filter is removed). 62 tests.
+- 2026-11-23 — Embed Beat tick `expires` raised from 60 s to 300 s (clock-drift margin
+  between Beat and worker machines); test pins it. 63 tests.
