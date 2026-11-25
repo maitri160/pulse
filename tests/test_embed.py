@@ -143,14 +143,15 @@ class FlakyEmbedder(FakeEmbedder):
 
 def test_one_bad_article_does_not_block_the_rest(db_session):
     source = make_source(db_session)
-    good_ids = [make_article(db_session, source, n).id for n in (1, 2, 4, 5)]
+    good_ids = [make_article(db_session, source, n).id for n in (1, 2)]
     bad = make_article(db_session, source, 3, content="a bad body")
+    good_ids += [make_article(db_session, source, n).id for n in (4, 5)]
     db_session.commit()  # a failure rolls back; the test's own rows must survive that
     flaky = FlakyEmbedder()
 
     done = embed_pending(db_session, flaky)
 
-    assert done == 4  # 3 failed alone; the ones before AND after it were embedded
+    assert done == 4  # only the bad one failed; those before AND after it were embedded
     assert flaky.failures == 1  # tried once, not picked again and again in this run
     for article_id in good_ids:
         assert db_session.get(Article, article_id).embedding is not None

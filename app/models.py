@@ -88,6 +88,9 @@ class Article(Base):
     # NULL = not embedded yet. Comes back from the DB as a numpy array, so test it with
     # `is None`, never with `if article.embedding:`.
     embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIM))
+    # The event this article is about. NULL = not clustered yet. Duplicates get their
+    # original's event, so counting sources per event is one simple query.
+    event_id: Mapped[int | None] = mapped_column(ForeignKey("events.id"), index=True)
 
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Indexed because dedupe loads "originals fetched in the last 3 days".
@@ -97,13 +100,20 @@ class Article(Base):
 
 
 class Event(Base):
-    """A real-world happening that groups many articles. Filled in from Week 2."""
+    """A real-world happening that groups many articles (see app/events/cluster.py)."""
 
     __tablename__ = "events"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    title: Mapped[str]
+    title: Mapped[str]  # the first article's title, until the LLM summary (Week 3)
     summary: Mapped[str | None]  # LLM summary (Week 3)
+
+    # The average of its original articles' embeddings: the event's "centre of meaning".
+    # A new article joins the event whose centroid is closest, if it's close enough.
+    centroid: Mapped[list[float]] = mapped_column(Vector(EMBEDDING_DIM))
+    # When its newest article was published. Only events with recent articles can take
+    # new ones (so "storm hits coast" in March doesn't join last October's storm).
+    last_article_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 
     article_count: Mapped[int] = mapped_column(server_default="0")
     source_count: Mapped[int] = mapped_column(server_default="0")

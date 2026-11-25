@@ -98,3 +98,18 @@ One entry per milestone: date, what was done, commit hash. Newest at the bottom.
   (fails if the `failed` filter is removed). 62 tests.
 - 2026-11-23 — Embed Beat tick `expires` raised from 60 s to 300 s (clock-drift margin
   between Beat and worker machines); test pins it. 63 tests.
+- 2026-11-25 — **P2 M8 done: clustering into events.** Migration `af4ecdd684ce` (hand-fixed:
+  pgvector import, unnamed FK): `events.centroid`, `events.last_article_at`,
+  `articles.event_id`. `app/events/cluster.py`: single-pass clustering, threshold 0.75,
+  3-day window either side, advisory lock, centroid and counts recomputed in SQL,
+  duplicates follow their original. Task renamed `embed_and_cluster`. First live run: 1,229
+  originals -> 946 events in ~9 s, same count as an in-memory simulation. Two days later,
+  live: 2,719 articles in 1,828 events; all 23 feeds had recovered by backoff from an
+  overnight DNS outage. Reviewer: no criticals. Fixed: future/old feed dates (seen in real
+  data), one bad article blocking the rest, missing tests. Dry run with the fixes (rolled
+  back): 1,845 events, biggest 106 -> 100 articles, now 21-25 Nov instead of 9-25 Nov. 79
+  tests; each fix mutation-checked. Known/deferred: a long story stays one event (the
+  100-article one); events made before the fix were not re-clustered; no cross-connection
+  late-duplicate test; no empty-table guard in the migration. Also fixed an M7 test whose
+  bad article was last, so it didn't prove newer ones get embedded. Next: M9 events API.
+  (commit: pending)

@@ -3,6 +3,7 @@
 import logging
 
 from app.db import SessionLocal
+from app.events.cluster import cluster_pending
 from app.events.embed import embed_pending, get_embedder
 from app.ingest.fetcher import make_http_client
 from app.ingest.scheduling import claim_due_sources, run_source
@@ -36,10 +37,12 @@ def fetch_source(source_id: int) -> None:
 
 
 @celery_app.task
-def embed_articles() -> int:
-    """Run by Beat every minute, on the `embed` queue: embed new original articles."""
+def embed_and_cluster() -> tuple[int, int]:
+    """Run by Beat every minute, on the `embed` queue: embed new originals, then put them
+    into events. Same task, so an article embedded this minute is clustered this minute."""
     with SessionLocal() as session:
-        done = embed_pending(session, get_embedder())
-    if done:
-        logger.info("Embedded %d articles", done)
-    return done
+        embedded = embed_pending(session, get_embedder())
+        clustered = cluster_pending(session)
+    if embedded or clustered:
+        logger.info("Embedded %d, clustered %d articles", embedded, clustered)
+    return embedded, clustered
