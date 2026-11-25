@@ -98,4 +98,6 @@ yellow = Week 3 (LLM summaries). Week 3 also adds ranking and caching on the rea
 | Exact centroid search with a btree on `last_article_at` | HNSW index on centroids | Only recent events are scanned (548 rows, 1.2 ms total); an approximate index plus a WHERE filter can miss the best match |
 | Clustering serialised by `pg_advisory_xact_lock`, one article per transaction | Row locks | Two runs could both create an event for one story, and a row that doesn't exist yet can't be locked. Released automatically at commit/rollback |
 | Two-sided 3-day window; article time capped at `fetched_at` | Lower bound only, trusting feed dates | Real data: 9 Nov articles had joined an 18 Nov event; a future typo would keep an event open for years |
+| Keyset (cursor) pagination on `(last_article_at, id)` | `LIMIT/OFFSET` | New events shift OFFSET pages, so items repeat; the cursor also stays fast on deep pages. Trade-off: no "jump to page 7", and an event that moves up mid-paging can be missed |
+| Explicit Pydantic response models; queries select only those columns | Return ORM rows | Internal columns (384-number centroid, full text) can't leak, and aren't loaded |
 | One shared feed, no user accounts | Per-user personalised feeds | Accounts cost about a week and would block caching one ranked feed for everyone |

@@ -112,4 +112,16 @@ One entry per milestone: date, what was done, commit hash. Newest at the bottom.
   100-article one); events made before the fix were not re-clustered; no cross-connection
   late-duplicate test; no empty-table guard in the migration. Also fixed an M7 test whose
   bad article was last, so it didn't prove newer ones get embedded. Next: M9 events API.
+  (commit bcd6fb7)
+- 2026-11-25 — **P2 M9 done: events API.** `app/api/events.py`: `GET /events` (most recently
+  active first, keyset cursor, `limit`, `min_sources`) and `GET /events/{id}` (event + newest
+  100 articles, one JOIN). Explicit response models, so no centroid or full text leaks. No
+  migration: the `last_article_at` index serves the list (0.06 ms). Live: 1,835 events over
+  19 pages, each exactly once; median 1.5 ms list, 2.6 ms for a 106-article event. Reviewer:
+  no criticals. Fixed: tests never had time order differ from id order (sorting by id
+  passed), and future-dated articles stayed on top of an event. 109 tests; 10 mutations
+  checked. Known/deferred: an event that jumps to the top mid-paging can be missed;
+  `min_sources` isn't indexed; links must be limited to http/https before the UI renders
+  them (0 bad ones stored today). LLM engineering requirements added to CLAUDE.md. Phase 2
+  code complete. Next: phase 2 quiz, then phase 3.
   (commit: pending)

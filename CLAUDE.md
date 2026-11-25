@@ -52,6 +52,32 @@ the default `python3` is 3.14, so don't use it). Docker Desktop 29.9 works. Imag
    `/metrics` endpoint, README with architecture diagram + "Design decisions", deploy,
    resume bullet. Stretch: Locust load test.
 
+## LLM engineering requirements (build Week 3 / phase 3 against these)
+Write no LLM summary code that skips these. One milestone per item, each with tests, a
+commit, and a 3–5 line concept explanation with one link.
+
+1. **Structured output:** the summariser returns JSON validated by a Pydantic model (`title`,
+   `summary`, `key_points`, `cited_article_ids`). Invalid → one retry with the validation
+   error, then mark the event `summary_failed`; never crash the worker. Reject cited ids
+   that aren't articles of this event.
+2. **Untrusted input:** article text is data, not instructions. Wrap it in clear delimiters,
+   tell the model to ignore instructions inside it, keep the output schema-checked. Test
+   with an article containing "ignore previous instructions and ...".
+3. **Prompts as code:** prompts live in `app/llm/prompts/*.txt` with a version string. Store
+   `prompt_version` and model name on each summary; store `embedding_model` with each vector
+   (migration needed).
+4. **Provider interface:** one small Protocol, implementations behind it; timeout, retry with
+   backoff on rate limits, optional fallback model. Tests use a fake provider.
+5. **Cost + caching:** log tokens in/out, latency, model and estimated cost per call to an
+   `llm_calls` table. Skip the call when a hash of (prompt_version, model, input article ids)
+   matches the last summary.
+6. **Evals** (`evals/` folder, not in the request path):
+   - clustering: hand-labelled set → precision / recall / F1.
+   - summary faithfulness: 20–30 events; LLM-judge rubric (is every claim supported by the
+     cited articles?) + a CSV for the user's manual spot-check.
+   - a tiny fixed subset runs in CI with the fake/cheap provider; regressions fail the build.
+     Write results to `evals/results.md` for the README.
+
 ## Progress
 Milestone log: [docs/progress.md](docs/progress.md). Design decisions:
 [docs/architecture.md](docs/architecture.md#design-decisions).

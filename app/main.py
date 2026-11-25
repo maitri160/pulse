@@ -3,10 +3,12 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
+from app.api.events import router as events_router
 from app.config import settings
 from app.db import engine
 
 app = FastAPI(title="Pulse")
+app.include_router(events_router)
 
 redis_client = redis.Redis.from_url(settings.redis_url, socket_connect_timeout=2)
 
